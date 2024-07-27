@@ -80,10 +80,10 @@ func main() {
 		if (r.Method == "HEAD" || r.Method == "GET") && strings.Contains(endpoint, "/blobs/sha256:") {
 			parts := strings.Split(endpoint, "/")
 			requestDigest := parts[len(parts)-1]
-			// if !matches(digestRegex, requestDigest) {
-			// 	writeOCIError("BLOB_UNKNOWN", "blob unknown to registry", w, 404)
-			// 	return
-			// }
+			if !matches(digestRegex, requestDigest) {
+				writeOCIError("BLOB_UNKNOWN", "blob unknown to registry", w, 404)
+				return
+			}
 			blobPath := path.Join(rootDir, name, "_blobs", requestDigest)
 			b, err := fileExists(blobPath)
 			var status int
@@ -92,7 +92,7 @@ func main() {
 				return
 			}
 			if b {
-				// w.Header().Set("Docker-Content-Digest", requestDigest)
+				w.Header().Set("Docker-Content-Digest", requestDigest)
 				status = 200
 
 				if r.Method == "GET" {
@@ -183,14 +183,13 @@ func main() {
 		if r.Method == "PATCH" && strings.Contains(endpoint, "/blobs/uploads/") {
 			parts := strings.Split(endpoint, "/")
 			location := parts[len(parts)-1]
-			// w.Header().Set("Location", location)
 			w.Header().Set("Location", r.RequestURI)
 
 			l := r.Header.Get("Content-Length")
 			i, err := strconv.Atoi(l)
 			if err != nil {
-				// ... handle error
-				panic(err)
+				writeServerError(err, w)
+				return
 			}
 
 			cr := r.Header.Get("Content-Range")
@@ -263,7 +262,6 @@ func main() {
 			}
 
 			w.WriteHeader(202)
-
 		}
 		// end-6
 		if r.Method == "PUT" && strings.Contains(endpoint, "/blobs/uploads/") {
@@ -343,7 +341,7 @@ func main() {
 			w.WriteHeader(201)
 		}
 		// end-8a
-		if r.Method == "GET" && strings.HasSuffix(endpoint, "/tags/list") {
+		if r.Method == "GET" && strings.HasSuffix(endpoint, "/tags/list") && r.FormValue("last") == "" {
 			if _, err := os.ReadDir(path.Join(rootDir, name)); err != nil {
 				writeOCIError("NAME_UNKNOWN", "repository name not known to registry", w, 404)
 				return
@@ -367,6 +365,7 @@ func main() {
 				writeServerError(wE, w)
 				return
 			}
+			return
 		}
 		// end-8b
 		if r.Method == "GET" && strings.HasSuffix(endpoint, "/tags/list") {
@@ -415,9 +414,58 @@ func main() {
 				writeServerError(wE, w)
 				return
 			}
+			return
 		}
 		// end-9 (delete manifest)
+		if r.Method == "DELETE" && strings.Contains(endpoint, "/manifests/") {
+
+			parts := strings.Split(endpoint, "/")
+			lastPart := parts[len(parts)-1]
+			isRef := matches(refRegex, lastPart)
+			isDigest := matches(digestRegex, lastPart)
+
+			if !(isRef || isDigest) {
+				writeOCIError("MANIFEST_INVALID", "manifest invalid", w, 404)
+				return
+			}
+
+			manifestPath := path.Join(rootDir, name, lastPart)
+			err := os.RemoveAll(manifestPath)
+			if err != nil {
+				w.WriteHeader(400)
+				return
+			}
+			w.WriteHeader(202)
+			return
+
+		}
 		// end-10 (delete blob)
+		if r.Method == "DELETE" && strings.Contains(endpoint, "/blobs/") {
+			parts := strings.Split(endpoint, "/")
+			requestDigest := parts[len(parts)-1]
+			if !matches(digestRegex, requestDigest) {
+				writeOCIError("BLOB_UNKNOWN", "blob unknown to registry", w, 404)
+				return
+			}
+			blobPath := path.Join(rootDir, name, "_blobs", requestDigest)
+			b, err := fileExists(blobPath)
+			if err != nil {
+				writeServerError(err, w)
+				return
+			}
+			if b {
+				err := os.RemoveAll(blobPath)
+				if err != nil {
+					w.WriteHeader(400)
+					return
+				}
+				w.WriteHeader(202)
+				return
+			} else {
+				w.WriteHeader(404)
+				return
+			}
+		}
 		// end-11
 		if r.Method == "POST" && strings.Contains(endpoint, "/blobs/uploads/") {
 
@@ -459,7 +507,40 @@ func main() {
 			return
 		}
 		// end-12a (referres)
+		if r.Method == "GET" && strings.Contains(endpoint, "/referrers/") && r.FormValue("artifactType") == "" {
+
+			// d := r.FormValue("digest")
+
+			// isRef := matches(refRegex, d)
+			// isDigest := matches(digestRegex, d)
+
+			// if !(isRef || isDigest) {
+			// 	writeOCIError("MANIFEST_INVALID", "manifest invalid", w, 400)
+			// 	return
+			// }
+
+			// w.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
+
+			w.WriteHeader(404)
+			return
+		}
 		// end-12b (referres)
+		if r.Method == "GET" && strings.Contains(endpoint, "/referrers/") && r.FormValue("artifactType") == "" {
+
+			// d := r.FormValue("digest")
+			// // at := r.FormValue("artifactType")
+
+			// isRef := matches(refRegex, d)
+			// isDigest := matches(digestRegex, d)
+
+			// if !(isRef || isDigest) {
+			// 	writeOCIError("MANIFEST_INVALID", "manifest invalid", w, 404)
+			// 	return
+			// }
+
+			w.WriteHeader(404)
+			return
+		}
 		// end-13
 		if r.Method == "GET" && strings.Contains(endpoint, "/blobs/uploads/") {
 			parts := strings.Split(endpoint, "/")
