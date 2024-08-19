@@ -19,6 +19,7 @@ import (
 
 	"github.com/distribution/distribution/uuid"
 	_ "github.com/opencontainers/image-spec/specs-go/v1"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 const (
@@ -338,10 +339,23 @@ func main() {
 			digest := getDigest(buf.Bytes())
 			w.Header().Set("Location", fmt.Sprintf("/v2/%s/manifests/%s", name, digest))
 
+			// process subject
+			m := v1.Manifest{}
+			err = json.Unmarshal(buf.Bytes(), &m)
+			if err != nil {
+				writeServerError(err, w)
+				return
+			}
+			if m.Subject != nil {
+				s := *m.Subject
+				w.Header().Set("OCI-Subject", string(s.Digest))
+			}
+
 			w.WriteHeader(201)
+			return
 		}
 		// end-8a
-		if r.Method == "GET" && strings.HasSuffix(endpoint, "/tags/list") && r.FormValue("last") == "" {
+		if r.Method == "GET" && strings.HasSuffix(endpoint, "/tags/list") {
 			if _, err := os.ReadDir(path.Join(rootDir, name)); err != nil {
 				writeOCIError("NAME_UNKNOWN", "repository name not known to registry", w, 404)
 				return
@@ -368,7 +382,7 @@ func main() {
 			return
 		}
 		// end-8b
-		if r.Method == "GET" && strings.HasSuffix(endpoint, "/tags/list") {
+		if r.Method == "GET" && strings.Contains(endpoint, "/tags/list") {
 			n := r.FormValue("n")
 			last := r.FormValue("last")
 
@@ -509,7 +523,12 @@ func main() {
 		// end-12a (referres)
 		if r.Method == "GET" && strings.Contains(endpoint, "/referrers/") && r.FormValue("artifactType") == "" {
 
-			// d := r.FormValue("digest")
+			parts := strings.Split(endpoint, "/")
+			requestDigest := parts[len(parts)-1]
+			if !matches(digestRegex, requestDigest) {
+				writeOCIError("BLOB_UNKNOWN", "blob unknown to registry", w, 404)
+				return
+			}
 
 			// isRef := matches(refRegex, d)
 			// isDigest := matches(digestRegex, d)
@@ -520,14 +539,23 @@ func main() {
 			// }
 
 			// w.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
+			i := v1.Index{}
+			log.Println(i)
+
+			w.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
 
 			w.WriteHeader(404)
 			return
 		}
 		// end-12b (referres)
-		if r.Method == "GET" && strings.Contains(endpoint, "/referrers/") && r.FormValue("artifactType") == "" {
+		if r.Method == "GET" && strings.Contains(endpoint, "/referrers/") {
 
-			// d := r.FormValue("digest")
+			parts := strings.Split(endpoint, "/")
+			requestDigest := parts[len(parts)-1]
+			if !matches(digestRegex, requestDigest) {
+				writeOCIError("BLOB_UNKNOWN", "blob unknown to registry", w, 404)
+				return
+			}
 			// // at := r.FormValue("artifactType")
 
 			// isRef := matches(refRegex, d)
