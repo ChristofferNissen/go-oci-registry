@@ -78,7 +78,8 @@ func main() {
 		}
 
 		// end-2
-		if (r.Method == "HEAD" || r.Method == "GET") && strings.Contains(endpoint, "/blobs/sha256:") {
+		if (r.Method == "HEAD" || r.Method == "GET") &&
+			strings.Contains(endpoint, "/blobs/sha256:") {
 			parts := strings.Split(endpoint, "/")
 			requestDigest := parts[len(parts)-1]
 			if !matches(digestRegex, requestDigest) {
@@ -170,7 +171,8 @@ func main() {
 			w.WriteHeader(202)
 		}
 		// end-4b
-		if r.Method == "POST" && strings.Contains(endpoint, "/blobs/uploads/") && r.FormValue("mount") == "" {
+		if r.Method == "POST" && strings.Contains(endpoint, "/blobs/uploads/") &&
+			r.FormValue("mount") == "" {
 			digest := r.FormValue("digest")
 			if digest == "" {
 				http.Error(w, "Digest missing", 400)
@@ -290,7 +292,10 @@ func main() {
 				log.Println(string(buf))
 
 				digest := r.FormValue("digest")
-				os.Rename(path.Join(rootDir, name, "_blobs", location), path.Join(rootDir, name, "_blobs", digest))
+				os.Rename(
+					path.Join(rootDir, name, "_blobs", location),
+					path.Join(rootDir, name, "_blobs", digest),
+				)
 
 				w.Header().Set("Location", fmt.Sprintf("/v2/%s/blobs/%s", name, digest))
 				w.WriteHeader(201)
@@ -521,7 +526,8 @@ func main() {
 			return
 		}
 		// end-12a (referres)
-		if r.Method == "GET" && strings.Contains(endpoint, "/referrers/") && r.FormValue("artifactType") == "" {
+		if r.Method == "GET" && strings.Contains(endpoint, "/referrers/") &&
+			r.FormValue("artifactType") == "" {
 
 			parts := strings.Split(endpoint, "/")
 			requestDigest := parts[len(parts)-1]
@@ -588,7 +594,6 @@ func main() {
 			w.WriteHeader(204)
 			return
 		}
-
 	})
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -613,7 +618,13 @@ func writeServerError(err error, w http.ResponseWriter) {
 	http.Error(w, es, 500)
 }
 
-func writeBodyToFileWithLocation(destFile string, w http.ResponseWriter, r *http.Request, name string, digest string) {
+func writeBodyToFileWithLocation(
+	destFile string,
+	w http.ResponseWriter,
+	r *http.Request,
+	name string,
+	digest string,
+) {
 	writeBodyToFile(destFile, w, r)
 	if !validateBlob(destFile, r.ContentLength, digest) {
 		http.Error(w, "blob did not match length or digest", 400)
@@ -664,8 +675,13 @@ func writeBodyToFile(destFile string, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeBodyChunkToFile(destFile string, start, end int64, len int, w http.ResponseWriter, r *http.Request) {
-
+func writeBodyChunkToFile(
+	destFile string,
+	start, end int64,
+	len int,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	f, err := os.OpenFile(destFile, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		writeServerError(err, w)
@@ -780,7 +796,7 @@ func writeOCIError(code string, message string, w http.ResponseWriter, statusCod
 func parseName(url string) (string, error) {
 	s := strings.TrimPrefix(url, "/v2/")
 	paths := strings.Count(s, "/")
-	var name = ""
+	name := ""
 	if paths <= 1 {
 		return "", errors.New(fmt.Sprintf("URL does not match any valid OCI endpoint: %s", url))
 	}
